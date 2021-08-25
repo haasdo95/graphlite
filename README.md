@@ -192,7 +192,7 @@ using NeighborsConstView = std::pair<NeighborsConstIterator,
 
 For `UNDIRECTED` graphs, `NeighborsView` and `NeighborsConstView` are exactly the types of `neighbors_view` from the previous section. 
 
-However, for `DIRECTED` graphs, a node can have both in-neighbors and out-neighbors. If we have two nodes, $u, v$, and a directed edge $(u\to v)$, then $u$ is an in-neighbor of $v$ and $v$ is an out-neighbor of $u$. To describe the two types of neighbors, we need two neighbor views instead of one, using the following template
+However, for `DIRECTED` graphs, a node can have both in-neighbors and out-neighbors. If we have two nodes, u, v, and a directed edge (u -> v), then u is an in-neighbor of v and v is an out-neighbor of u. To describe the two types of neighbors, we need two neighbor views instead of one, using the following template
 ```c++
 template<typename T>
 struct OutIn {
@@ -591,7 +591,7 @@ Results in an no-op if
 - either `source_iv` or `target_iv` does not represent an existing node
 - `(source_iv, target_iv)` does not represent an existing edge
 
-Returns the number of edges actually removed. 0 or 1 if `multi_edge` is `DISALLOWED`; $[0, +\infty)$ if `multi_edge` is `ALLOWED`.
+Returns the number of edges actually removed. 0 or 1 if `multi_edge` is `DISALLOWED`; [0, +\infty) if `multi_edge` is `ALLOWED`.
 
 #### *(2) Remove one edge from the graph by position*
 ```c++
