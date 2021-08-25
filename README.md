@@ -6,11 +6,13 @@ Graphlite is a lightweight generic graph library that supports
 - multi-edges & self-loops
 - user-specified data structures for the adjacency list and neighbor containers
 
-There are a number of C++ graph libraries in the marketplace, among which the Boost Graph Library(BGL) is the best-known. The downside of the BGL is that even though it's header-only, it still has Boost as its dependency. This library, being a generic header-only graph library, is very much inspired by the BGL, except that it is completely self-contained and all the functionality is in one singular header file.
+in a pay-for-what-you-use manner thanks to template metaprogramming. 
+
+There are a number of C++ graph libraries in the marketplace, among which the Boost Graph Library(BGL) is the best-known. The downside of the BGL is that even though it's header-only, it still has Boost as its dependency. This library, being a generic header-only graph library, is very much inspired by the BGL, except that it is completely self-contained and all the functionality is in one singular header file, src/graph_lite.h.
 
 Note that unlike the BGL, this library offers the graph data structure but not the various graph algorithms. The data structure alone can already prove useful for simple tasks that only require graph traversal. Even for tasks that require graph algorithms, the usage tends to be limited to one or two graph algorithms, which can be readily implemented on top of the data structure, and, even better, shared with others. 
 
-This library requires C++ 17(or higher).
+This library requires C++ 17 (or higher).
 
 # Documentation
 1. [Graph and its Iterators](#1-graph-and-its-iterators)
@@ -86,6 +88,11 @@ Non-type template parameter that takes value from the enum below. Determines the
 enum class Container { VEC, LIST, SET, UNORDERED_SET, MULTISET, UNORDERED_MULTISET };
 ```
 
+>Performance tip: 
+>- Prefer Container::VEC if graph modification is infrequent
+>- Prefer SET/UNORDERED_SET/MULTISET/UNORDERED_MULTISET if graph modification is frequent
+>- Use LIST only when (1) `NodeType` is not hashable (ruling out unordered_maps) (2) `NodeType` doesn't support operator< (ruling out maps), and (3) iterator invalidation is absolutely unacceptable (ruling out VEC). 
+
 *Examples*
 ```c++
 //(default)undirected simple graph using hashtable for adj list and hashset for neighbors
@@ -104,7 +111,7 @@ Much like the STL containers, `Graph` also has custom iterators. The iterator ty
 typename GType::Iterator non_const_it;
 typename GType::ConstIterator const_it;
 ```
-Obviously, default-constructed iterators are rarely useful. The begin and end iterators can be accessed using the following
+The begin and end iterators can be accessed using the following
 ```c++
 Iterator begin() noexcept;
 Iterator end() noexcept;
