@@ -15,9 +15,9 @@ This library requires C++ 17(or higher).
 # Documentation
 1. [Graph and its Iterators](#1-graph-and-its-iterators)
 
-   1. [Construction](#construction-of-a-graph)
-   2. [Node Iterators](#node-iterators)
-   3. [Neighbor Iterators](#neighbor-iterators)
+   - [Construction](#construction-of-a-graph)
+   - [Node Iterators](#node-iterators)
+   - [Neighbor Iterators](#neighbor-iterators)
 
 2. [Queries](#2-queries)
 
