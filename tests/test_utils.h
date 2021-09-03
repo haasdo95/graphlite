@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <random>
+
 #include "graph_lite.h"
 
 using namespace graph_lite;
