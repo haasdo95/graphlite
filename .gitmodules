@@ -1,3 +1,6 @@
 [submodule "lib/googletest"]
 	path = lib/googletest
 	url = https://github.com/google/googletest.git
+[submodule "lib/dot_parser_cpp"]
+	path = lib/dot_parser_cpp
+	url = https://github.com/haasdo95/dot_parser_cpp
