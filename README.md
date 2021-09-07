@@ -302,6 +302,13 @@ size_t size() const noexcept;
 
 Returns the number of nodes in the graph.
 
+### Return edge count
+```c++
+int num_edges() const noexcept;
+```
+Returns the number of edges in the graph.
+
+
 ### Count the number of edges between two nodes
 ```c++
 int count_edges(const U& source_iv, const V& target_iv) const noexcept;
@@ -497,13 +504,13 @@ Re-adding an existing node results in an no-op. Returns the number of nodes actu
 
 *(2) Exclusive to graphs **with node properties***
 ```c++
-int add_node_with_prop(NT&& new_node, NPT&& prop) noexcept;
+int add_node_with_prop(NT&& new_node, NPT&&... prop) noexcept;
 ```
 Adds a node with property to the graph. 
 
 Re-adding an existing node results in an no-op; in particular, the property of the existing node will **not** be changed. Returns the number of nodes actually added, in this case 0 or 1.  
 
-`new_node` must have the same type as `NodeType`. `prop` must be implicitly or explicitly convertible to `NodePropType`. 
+`new_node` must have the same type as `NodeType`. `NodePropType` must be constructible from `prop`. 
 
 *Examples*
 ```c++
@@ -516,6 +523,13 @@ sg.add_node_with_prop(std::string("Bob"), 22);
 // same_type requirement
 // sg.add_node_with_prop("NO", 0);  // WON'T COMPILE! 
 // "No" has type const char*, not std::string
+
+Graph<int, std::map<std::string, int>> mg;
+// unfortunately a map is NOT constructible from ONE pair; must use std::map explicitly
+mg.add_node_with_prop(0, std::map<std::string, int>{{"age", 26}});
+// construct node property (std::map<std::string, int>) in place with more than one pairs
+mg.add_node_with_prop(0, std::make_pair("age", 21), std::make_pair("salary", 21000));
+
 ```
 
 ### Remove nodes from the graph
@@ -558,7 +572,7 @@ Returns the number of edges actually added, in this case 0 or 1.
 
 *(2) Exclusive to graphs **with edge properties***
 ```c++
-int add_edge_with_prop(U&& source_iv, V&& target_iv, EPT&& prop) noexcept;
+int add_edge_with_prop(U&& source_iv, V&& target_iv, EPT&&... prop) noexcept;
 ```
 Adds an edge with property to the graph.
 
@@ -567,7 +581,7 @@ The following attempts to add an edge will result in a no-op:
 - Re-adding an existing edge when `multi_edge` is `DISALLOWED` 
 - Adding a self-loop when `self_loop` is `DISALLOWED`
 
-Each of `source_iv` and `target_iv` can be either an iterator or a value. `prop` must be implicitly or explicitly convertible to `EdgePropType`.
+Each of `source_iv` and `target_iv` can be either an iterator or a value. `EdgePropType` must be constructible from `prop`.
 
 Returns the number of edges actually added, in this case 0 or 1.
 
@@ -583,6 +597,12 @@ g.add_edge(pos_2, 3);
 Graph<std::string, void, double> sg;
 g.add_nodes(std::string("NY"), std::string("LA"));
 g.add_edge_with_prop("NY", "LA", 2 * 24 + 19);
+
+Graph<int, std::map<std::string, int>> mg;
+// unfortunately a map is NOT constructible from ONE pair; must use std::map explicitly
+mg.add_edge_with_prop(0, std::map<std::string, int>{{"age", 26}});
+// a map is still constructible from more than one pairs though
+mg.add_edge_with_prop(1, std::make_pair("age", 21), std::make_pair("salary", 21000));
 ```
 
 ### Remove edges from the graph

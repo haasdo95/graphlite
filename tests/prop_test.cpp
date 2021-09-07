@@ -16,6 +16,69 @@ template<typename T>
 class DemoNoMultiEdge: public testing::Test {};
 TYPED_TEST_SUITE(DemoNoMultiEdge, NoMultiEdge);
 
+template<EdgeDirection direction, MultiEdge me, SelfLoop sl, Map M, Container C>
+void test_edge_count() {
+    Graph<int, void, void, direction, me, sl, M, C> g;
+    ASSERT_EQ(g.num_edges(), 0);
+    g.template add_nodes(0, 1, 2);
+    g.template add_edge(0, 1);
+    g.template add_edge(1, 2);
+    g.template add_edge(2, 0);
+    ASSERT_EQ(g.num_edges(), 3);
+    g.template add_edge(0, 1);
+    g.template add_edge(0, 1);
+    if constexpr(me==graph_lite::MultiEdge::ALLOWED) {
+        ASSERT_EQ(g.num_edges(), 5);
+    } else {
+        ASSERT_EQ(g.num_edges(), 3);
+    }
+    g.template add_edge(1, 1);
+    g.template add_edge(1, 1);
+    if constexpr(sl==graph_lite::SelfLoop::ALLOWED) {
+        if constexpr(me==graph_lite::MultiEdge::ALLOWED) {
+            ASSERT_EQ(g.num_edges(), 7);  // (0, 1), (0, 1), (0, 1) (1, 2), (2, 0) (1, 1), (1, 1)
+        } else {
+            ASSERT_EQ(g.num_edges(), 4);  // (0, 1), (1, 2), (2, 0) (1, 1)
+        }
+    } else {
+        if constexpr(me==graph_lite::MultiEdge::ALLOWED) {
+            ASSERT_EQ(g.num_edges(), 5);  // (0, 1), (0, 1), (0, 1) (1, 2), (2, 0)
+        } else {
+            ASSERT_EQ(g.num_edges(), 3);  // (0, 1), (1, 2), (2, 0)
+        }
+    }
+    g.template add_nodes(3);
+    g.template add_edge(0, 3);
+    g.template add_edge(1, 3);
+    g.template add_edge(2, 3);
+    g.template remove_nodes(1);  // purge all 1-related edges
+    ASSERT_EQ(g.num_edges(), 3);  // only (2, 0), (0, 3), (2, 3) left
+    g.template add_edge(0, 2);
+    if constexpr(direction==graph_lite::EdgeDirection::UNDIRECTED and me==graph_lite::MultiEdge::DISALLOWED) {
+        ASSERT_EQ(g.num_edges(), 3);
+    } else {
+        ASSERT_EQ(g.num_edges(), 4);
+    }
+    g.template remove_nodes(0);
+    ASSERT_EQ(g.num_edges(), 1);  // only (2, 3) left
+}
+
+TYPED_TEST(DemoNoMultiEdge, edge_count) {
+    EXTRACT_MC
+    test_edge_count<EdgeDirection::UNDIRECTED, MultiEdge::DISALLOWED, SelfLoop::ALLOWED, M, C>();
+    test_edge_count<EdgeDirection::UNDIRECTED, MultiEdge::DISALLOWED, SelfLoop::DISALLOWED, M, C>();
+    test_edge_count<EdgeDirection::DIRECTED, MultiEdge::DISALLOWED, SelfLoop::ALLOWED, M, C>();
+    test_edge_count<EdgeDirection::DIRECTED, MultiEdge::DISALLOWED, SelfLoop::DISALLOWED, M, C>();
+}
+
+TYPED_TEST(DemoMultiEdge, edge_count) {
+    EXTRACT_MC
+    test_edge_count<EdgeDirection::UNDIRECTED, MultiEdge::ALLOWED, SelfLoop::ALLOWED, M, C>();
+    test_edge_count<EdgeDirection::UNDIRECTED, MultiEdge::ALLOWED, SelfLoop::DISALLOWED, M, C>();
+    test_edge_count<EdgeDirection::DIRECTED, MultiEdge::ALLOWED, SelfLoop::ALLOWED, M, C>();
+    test_edge_count<EdgeDirection::DIRECTED, MultiEdge::ALLOWED, SelfLoop::DISALLOWED, M, C>();
+}
+
 template<EdgeDirection direction, MultiEdge me, Map M, Container C>
 void test_val_iter() {
     Graph<int, void, double, direction,
@@ -127,6 +190,20 @@ void test_imp_conv() {
 
     // two entries refer to the same entity
     ASSERT_EQ(&g.edge_prop(0, 1), &g.edge_prop(1, 0));
+
+    // piecewise-construction
+    Graph<int, std::map<std::string, int>, std::map<std::string, int>,
+            EdgeDirection::DIRECTED, me, SelfLoop::DISALLOWED, M, C> mg;
+    mg.template add_node_with_prop(0, std::make_pair("age", 21), std::make_pair("salary", 21000));
+    auto pos_0 = mg.template find(0);
+    ASSERT_EQ(mg.template node_prop(pos_0).at("age"), 21);
+    ASSERT_EQ(mg.template node_prop(pos_0).at("salary"), 21000);
+    mg.template add_node_with_prop(1);  // empty node attr
+    ASSERT_EQ(mg.template node_prop(1).size(), 0);
+    mg.template add_edge_with_prop(0, 1);  // empty edge attr
+    ASSERT_EQ(mg.template edge_prop(0, 1).size(), 0);
+    mg.template add_edge_with_prop(1, 0, std::map<std::string, int>{{"common-friends", 3}});  // can't use pair if only one
+    ASSERT_EQ(mg.template edge_prop(1, 0).at("common-friends"), 3);
 }
 
 TYPED_TEST(DemoMultiEdge, test_imp_conv) {

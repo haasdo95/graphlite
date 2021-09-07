@@ -3,5 +3,8 @@
 
 #include <parser.hpp>
 #include <resolver.hpp>
+#include <graph_lite.h>
+
+
 
 #endif //GRAPHLITE_DOT_H

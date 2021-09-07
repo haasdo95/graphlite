@@ -40,6 +40,7 @@ namespace graph_lite {
     };
 }
 
+// type manipulation
 namespace graph_lite::detail {
     template <typename T>
     constexpr bool is_vector_v = std::is_same_v<T, std::vector<typename T::value_type, typename T::allocator_type>>;
@@ -55,8 +56,8 @@ namespace graph_lite::detail {
     // shorthand for turning const T& into T
     template<typename T>
     struct remove_cv_ref {
-            using type = std::remove_cv_t<std::remove_reference_t<T>>;
-        };
+        using type = std::remove_cv_t<std::remove_reference_t<T>>;
+    };
     template<typename T>
     using remove_cv_ref_t = typename remove_cv_ref<T>::type;
     // END OF shorthand for turning const T& into T
@@ -82,7 +83,7 @@ namespace graph_lite::detail {
 
     // test streamability
     template<typename T, typename = std::void_t<>>
-            struct is_streamable : std::false_type {};
+    struct is_streamable : std::false_type {};
     template<typename T>
     struct is_streamable<T, std::void_t<decltype(std::declval<std::ostream&>()<<std::declval<T>())>> : std::true_type {};
     template<typename T>
@@ -91,7 +92,7 @@ namespace graph_lite::detail {
 
     // test hashability
     template<typename T, typename = std::void_t<>>
-            struct is_std_hashable : std::false_type {};
+    struct is_std_hashable : std::false_type {};
     template<typename T>
     struct is_std_hashable<T, std::void_t<decltype(std::declval<std::hash<T>>()(std::declval<T>()))>> : std::true_type {};
     template<typename T>
@@ -100,7 +101,6 @@ namespace graph_lite::detail {
 
     template <Container C>
     struct MultiEdgeTraits {};
-
     template<> struct MultiEdgeTraits<Container::VEC> { static constexpr MultiEdge value = MultiEdge::ALLOWED; };
     template<> struct MultiEdgeTraits<Container::LIST> { static constexpr MultiEdge value = MultiEdge::ALLOWED; };
     template<> struct MultiEdgeTraits<Container::MULTISET> { static constexpr MultiEdge value = MultiEdge::ALLOWED; };
@@ -115,6 +115,7 @@ namespace graph_lite::detail {
     };
 }
 
+// operation on containers
 namespace graph_lite::detail::container {
     template<typename ContainerType, typename ValueType,
     typename = std::enable_if_t<std::is_convertible_v<remove_cv_ref_t<ValueType>, typename ContainerType::value_type>>>
@@ -167,7 +168,7 @@ namespace graph_lite::detail::container {
     // count the occurrence of a value
     template<typename ContainerType, typename ValueType>
     std::enable_if_t<!is_vector_v<ContainerType> and !is_list_v<ContainerType>, int>
-    count(ContainerType& c, const ValueType& v) {
+    count(const ContainerType& c, const ValueType& v) {
         return c.count(v);
     }
 
@@ -247,9 +248,9 @@ namespace graph_lite::detail::container {
         }
     }
     // END OF remove one
-} // END OF functions that work on all containers above
+}
 
-// base classes of Graph
+// mixin base classes of Graph
 namespace graph_lite::detail {
     // EdgePropListBase provides optional member variable edge_prop_list
     template<typename EPT>
@@ -359,7 +360,6 @@ namespace graph_lite::detail {
         }
     };
 
-
     // NodePropGraphBase provides different API depending on whether node prop is needed
     template<typename GType, typename NodePropType>
     struct NodePropGraphBase {
@@ -375,14 +375,16 @@ namespace graph_lite::detail {
             return const_cast<NodePropType&>(static_cast<const NodePropGraphBase*>(this)->node_prop(node_iv));
         }
 
-        template<typename NT, typename NPT>
-        int add_node_with_prop(NT&& new_node, NPT&& prop) noexcept {
+        template<typename NT, typename ...NPT>
+        int add_node_with_prop(NT&& new_node, NPT&&... prop) noexcept {
             static_assert(std::is_same_v<remove_cv_ref_t<NT>, typename GType::node_type>);
-            static_assert(std::is_constructible_v<NodePropType, NPT>);
+            static_assert(std::is_constructible_v<NodePropType, NPT...>);
             auto* self = static_cast<GType*>(this);
             if (!self->adj_list.count(new_node)) {  // insert if not already existing
                 // this should invoke(in-place) the constructor of PropNode
-                self->adj_list.emplace(std::forward<NT>(new_node), std::forward<NPT>(prop));
+                self->adj_list.emplace(std::piecewise_construct,
+                                       std::forward_as_tuple(std::forward<NT>(new_node)),
+                                       std::forward_as_tuple(std::forward<NPT>(prop)...));
                 return 1;
             }
             return 0; // a no-op if already existing
@@ -458,18 +460,18 @@ namespace graph_lite::detail {
             }
         }
 
-        template<typename U, typename V, typename EPT>
-        int add_edge_with_prop(U&& source_iv, V&& target_iv, EPT&& prop) noexcept {
-            static_assert(std::is_constructible_v<EdgePropType, EPT>);
+        template<typename U, typename V, typename ...EPT>
+        int add_edge_with_prop(U&& source_iv, V&& target_iv, EPT&&... prop) noexcept {
+            static_assert(std::is_constructible_v<EdgePropType, EPT...>);
             auto* self = static_cast<GType*>(this);
             auto src_pos = self->find_by_iter_or_by_value(source_iv);
             auto tgt_pos = self->find_by_iter_or_by_value(target_iv);
             if(src_pos==self->adj_list.end() or tgt_pos==self->adj_list.end()) {
                 if (src_pos==self->adj_list.end()) {
-                    self->print_by_iter_or_by_value(std::cerr << "edge involves non-existent node", source_iv) << "\n";
+                    self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent source", source_iv) << "\n";
                 }
                 if (tgt_pos==self->adj_list.end()) {
-                    self->print_by_iter_or_by_value(std::cerr << "edge involves non-existent node", target_iv) << "\n";
+                    self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent target", target_iv) << "\n";
                 }
                 return 0;
             }
@@ -477,11 +479,12 @@ namespace graph_lite::detail {
             const typename GType::node_type& tgt_full = tgt_pos->first;  // flesh out src and tgt
             if(self->check_edge_dup(src_pos, src_full, tgt_full)) { return 0; }
             if(self->check_self_loop(src_pos, tgt_pos, src_full)) { return 0; }
-            auto prop_pos = self->insert_edge_prop(std::forward<EPT>(prop));
+            auto prop_pos = self->insert_edge_prop(std::forward<EPT>(prop)...);
             container::insert(self->get_out_neighbors(src_pos), std::make_pair(tgt_full, prop_pos));
             if (src_pos!=tgt_pos or GType::DIRECTION==EdgeDirection::DIRECTED) {
                 container::insert(self->get_in_neighbors(tgt_pos), std::make_pair(src_full, prop_pos));
             }
+            ++self->num_of_edges;
             return 1;
         }
     };
@@ -494,10 +497,10 @@ namespace graph_lite::detail {
             auto tgt_pos = self->find_by_iter_or_by_value(target_iv);
             if(src_pos==self->adj_list.end() or tgt_pos==self->adj_list.end()) {
                 if (src_pos==self->adj_list.end()) {
-                    self->print_by_iter_or_by_value(std::cerr << "edge involves non-existent node", source_iv) << "\n";
+                    self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent source", source_iv) << "\n";
                 }
                 if (tgt_pos==self->adj_list.end()) {
-                    self->print_by_iter_or_by_value(std::cerr << "edge involves non-existent node", target_iv) << "\n";
+                    self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent target", target_iv) << "\n";
                 }
                 return 0;
             }
@@ -509,11 +512,13 @@ namespace graph_lite::detail {
             if (src_pos!=tgt_pos or GType::DIRECTION==EdgeDirection::DIRECTED) {
                 container::insert(self->get_in_neighbors(tgt_pos), src_full);
             }
+            ++self->num_of_edges;
             return 1;
         }
     };
 }
 
+// Graph class
 namespace graph_lite {
     template<typename NodeType=int, typename NodePropType=void, typename EdgePropType=void,
             EdgeDirection direction=EdgeDirection::UNDIRECTED,
@@ -557,13 +562,15 @@ namespace graph_lite {
                         and multi_edge == MultiEdge::ALLOWED), "node container does not support multi-edge");
         static_assert(not ((neighbors_container_spec == Container::MULTISET or neighbors_container_spec == Container::UNORDERED_MULTISET)
                         and multi_edge == MultiEdge::DISALLOWED), "disallowing multi-edge yet still using multi-set; use set/unordered_set instead");
-    public:  // exposed types
+    public:  // exposed types and constants
         using node_type = NodeType;
         using node_prop_type = NodePropType;
         using edge_prop_type = EdgePropType;
         static constexpr EdgeDirection DIRECTION = direction;
         static constexpr MultiEdge MULTI_EDGE = multi_edge;
         static constexpr SelfLoop SELF_LOOP = self_loop;
+        static constexpr Map ADJ_LIST_SPEC = adj_list_spec;
+        static constexpr Container NEIGHBORS_CONTAINER_SPEC = neighbors_container_spec;
     private:  // type gymnastics
         // handle neighbors that may have property
         // PairIterator is useful only when (1) the container is VEC or LIST and (2) edge prop is needed
@@ -710,8 +717,10 @@ namespace graph_lite {
             NodePropType prop;
             NeighborsType neighbors;
             PropNode() = default;  // needed for map/unordered map
-            explicit PropNode(const NodePropType& prop): prop{prop}, neighbors{} {}
-            explicit PropNode(NodePropType&& prop): prop{std::move(prop)}, neighbors{} {}
+            template<typename ...NPT>
+            explicit PropNode(NPT&&... prop): prop{std::forward<NPT>(prop)...}, neighbors{} {
+                static_assert(std::is_constructible_v<NodePropType, NPT...>);
+            }
         };
         static constexpr bool has_node_prop = not std::is_void_v<NodePropType>;
         using AdjListValueType = std::conditional_t<not has_node_prop, NeighborsType, PropNode>;
@@ -745,6 +754,7 @@ namespace graph_lite {
         using AdjListIterType = typename AdjListType::iterator;
         using AdjListConstIterType = typename AdjListType::const_iterator;
     private:
+        int num_of_edges{};
         AdjListType adj_list;
     private:  // iterator support
         template<bool IsConst>
@@ -865,8 +875,9 @@ namespace graph_lite {
         [[nodiscard]] int count_neighbors_helper(const T& node_iv) const {
             AdjListConstIterType pos = find_by_iter_or_by_value(node_iv);
             if (pos==adj_list.end()) {
-                print_by_iter_or_by_value(std::cerr << "counting out-neighbors of a non-existent node", node_iv) << "\n";
-                throw std::runtime_error("counting out-neighbors of a non-existent node");
+                std::string msg = is_out ? "out" : "in";
+                print_by_iter_or_by_value(std::cerr << "(count_neighbors) counting " << msg << "-neighbors of a non-existent node", node_iv) << "\n";
+                throw std::runtime_error("counting "+ msg +"-neighbors of a non-existent node");
             }
             if constexpr(is_out) {
                 return get_out_neighbors(pos).size();
@@ -879,12 +890,9 @@ namespace graph_lite {
         NeighborsConstView get_neighbors_helper(const T& node_iv) const {
             AdjListConstIterType pos = find_by_iter_or_by_value(node_iv);
             if (pos==adj_list.end()) {
-                std::string out_in = []{
-                    if constexpr(is_out) { return "out"; }
-                    else { return "in"; }
-                }();
-                print_by_iter_or_by_value(std::cerr << "finding "<< out_in <<"-neighbors of a non-existent node", node_iv) << "\n";
-                throw std::runtime_error("finding neighbors of a non-existent node");
+                std::string msg = is_out ? "out" : "in";
+                print_by_iter_or_by_value(std::cerr << "(neighbors) finding "<< msg <<"-neighbors of a non-existent node", node_iv) << "\n";
+                throw std::runtime_error("finding "+ msg +"-neighbors of a non-existent node");
             }
             const NeighborsContainerType& neighbors = [this, &pos]() -> auto& {
                 if constexpr(is_out) { return get_out_neighbors(pos); }
@@ -896,12 +904,9 @@ namespace graph_lite {
         NeighborsView get_neighbors_helper(const T& node_iv) {
             AdjListIterType pos = find_by_iter_or_by_value(node_iv);
             if (pos==adj_list.end()) {
-                std::string out_in = []{
-                    if constexpr(is_out) { return "out"; }
-                    else { return "in"; }
-                }();
-                print_by_iter_or_by_value(std::cerr << "finding "<< out_in <<"-neighbors of a non-existent node", node_iv) << "\n";
-                throw std::runtime_error("finding neighbors of a non-existent node");
+                std::string msg = is_out ? "out" : "in";
+                print_by_iter_or_by_value(std::cerr << "(neighbors) finding "<< msg <<"-neighbors of a non-existent node", node_iv) << "\n";
+                throw std::runtime_error("finding "+ msg +"-neighbors of a non-existent node");
             }
             NeighborsContainerType& neighbors = [this, &pos]() -> auto& {
                 if constexpr(is_out) { return get_out_neighbors(pos); }
@@ -1035,6 +1040,8 @@ namespace graph_lite {
     public:  // simple queries
         [[nodiscard]] size_t size() const noexcept { return adj_list.size(); }
 
+        [[nodiscard]] int num_edges() const noexcept { return num_of_edges; }
+
         template<typename T>
         bool has_node(const T& node_identifier) const noexcept {
             auto pos = find_node(node_identifier);
@@ -1070,12 +1077,11 @@ namespace graph_lite {
             return Iterator{this, pos};
         }
     private:  // edge addition helpers
-        template<typename EPT>
-        auto insert_edge_prop(EPT&& prop) {
+        template<typename...EPT>
+        auto insert_edge_prop(EPT&&... prop) {
             static_assert(has_edge_prop);
-            static_assert(std::is_constructible_v<EdgePropType, EPT>);
-            this->edge_prop_list.emplace_back(std::forward<EPT>(prop));
-
+            static_assert(std::is_constructible_v<EdgePropType, EPT...>);
+            this->edge_prop_list.emplace_back(std::forward<EPT>(prop)...);
             return EdgePropIterWrap<EdgePropType>{std::prev(this->edge_prop_list.end())};  // iterator to the last element
         }
 
@@ -1084,7 +1090,7 @@ namespace graph_lite {
                 // this catches multi-self-loop as well
                 const NeighborsContainerType& neighbors = get_out_neighbors(src_pos);
                 if (detail::container::find(neighbors, tgt_full)!=neighbors.end()) {
-                    std::cerr << "re-adding existing edge: (" << src_full << ", " << tgt_full << ")\n";
+                    std::cerr << "(add_edge) re-adding existing edge: (" << src_full << ", " << tgt_full << ")\n";
                     return true;
                 }
             }
@@ -1094,7 +1100,7 @@ namespace graph_lite {
         bool check_self_loop(AdjListIterType src_pos, AdjListIterType tgt_pos, const NodeType& src_full) {
             if constexpr(self_loop==SelfLoop::DISALLOWED) {
                 if (src_pos==tgt_pos) {
-                    std::cerr << "adding self loop on node: " << src_full << "\n";
+                    std::cerr << "(add_edge) adding self loop on node: " << src_full << "\n";
                     return true;
                 }
             }
@@ -1157,6 +1163,7 @@ namespace graph_lite {
                 // when src==tgt && UNDIRECTED, there is NO double entry
                 detail::container::erase_one(tgt_neighbors, tgt_remove_pos);
             }
+            --num_of_edges;
             return 1;
         }
 
@@ -1168,10 +1175,10 @@ namespace graph_lite {
             auto tgt_pos = find_by_iter_or_by_value(target_iv);
             if(src_pos==adj_list.end() or tgt_pos==adj_list.end()) {
                 if (src_pos==adj_list.end()) {
-                    print_by_iter_or_by_value(std::cerr << "edge involves non-existent node", source_iv) << "\n";
+                    print_by_iter_or_by_value(std::cerr << "(remove_edge) edge involves non-existent node", source_iv) << "\n";
                 }
                 if (tgt_pos==adj_list.end()) {
-                    print_by_iter_or_by_value(std::cerr << "edge involves non-existent node", target_iv) << "\n";
+                    print_by_iter_or_by_value(std::cerr << "(remove_edge) edge involves non-existent node", target_iv) << "\n";
                 }
                 return 0;  // no-op if nodes are not found
             }
@@ -1179,7 +1186,7 @@ namespace graph_lite {
             const NodeType & tgt_full = tgt_pos->first;
             if constexpr(self_loop==SelfLoop::DISALLOWED) {
                 if (src_pos==tgt_pos) {  // we know self loop cannot exist
-                    std::cerr << "cannot remove self loop on node " << src_full << " when self loop is not even permitted\n";
+                    std::cerr << "(remove_edge) cannot remove self loop on node " << src_full << " when self loop is not even permitted\n";
                     return 0;
                 }
             }
@@ -1187,10 +1194,11 @@ namespace graph_lite {
             if constexpr(multi_edge==MultiEdge::DISALLOWED) {  // remove at most 1
                 NeighborsIterator src_remove_pos = detail::container::find(src_neighbors, tgt_full);
                 if (src_remove_pos==src_neighbors.cend()) {
-                    std::cerr << "edge (" << src_full << ", " << tgt_full << ") not found\n";
+                    std::cerr << "(remove_edge) edge (" << src_full << ", " << tgt_full << ") not found\n";
                     return 0;
                 }
                 remove_edge(ConstIterator{this, src_pos}, src_remove_pos);
+                --num_of_edges;
                 return 1;
             } else {  // remove all edges between src and tgt, potentially removing no edge at all
                 static_assert(multi_edge==MultiEdge::ALLOWED);
@@ -1213,13 +1221,13 @@ namespace graph_lite {
                     assert(num_edges_removed == num_tgt_removed);
                 }
                 if (num_edges_removed==0) {
-                    std::cerr << "edge (" << src_full << ", " << tgt_full << ") not found\n";
+                    std::cerr << "(remove_edge) edge (" << src_full << ", " << tgt_full << ") not found\n";
                 }
+                num_of_edges -= num_edges_removed;
                 return num_edges_removed;
             }
         }
-        // END OF edge removal
-    private:  // node removal helpers
+    private:  // node removal helper
         template<bool OutIn>
         void purge_edge_with(AdjListIterType pos) noexcept {
             const NodeType& node = pos->first;
@@ -1256,14 +1264,13 @@ namespace graph_lite {
                 }
             }
         }
-        // END OF node removal helpers
     public:  // node removal
         // we can allow removal of several nodes by iterator because erase does not invalidate other iterators
         template<typename T>
         int remove_nodes(const T& node_iv) noexcept {
             auto pos = find_by_iter_or_by_value(node_iv);
             if (pos == adj_list.end()) { // no-op if not found
-                print_by_iter_or_by_value(std::cerr << "removing non-existent node", node_iv) << "\n";
+                print_by_iter_or_by_value(std::cerr << "(remove_nodes) removing non-existent node", node_iv) << "\n";
                 return 0;
             }
             purge_edge_with<true>(pos);  // purge all edges going out of node
@@ -1271,6 +1278,16 @@ namespace graph_lite {
                 // this loop makes it work for directed graphs as well
                 purge_edge_with<false>(pos);  // purge all edges coming into node
             }
+            // count purged edges
+            auto& out_nbrs = get_out_neighbors(pos);
+            int num_edges_purged = out_nbrs.size();
+            if constexpr(direction==EdgeDirection::DIRECTED) {
+                num_edges_purged += get_in_neighbors(pos).size();
+                if constexpr(self_loop==SelfLoop::ALLOWED) {  // we would be double counting self-edges
+                    num_edges_purged -= detail::container::count(out_nbrs, pos->first);
+                }
+            }
+            num_of_edges -= num_edges_purged;
             // finally erase pos
             adj_list.erase(pos);
             return 1;
