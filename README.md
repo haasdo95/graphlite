@@ -1,3 +1,5 @@
+![CI](https://github.com/haasdo95/graphlite/actions/workflows/ci.yml/badge.svg)
+
 # Introduction
 Graphlite is a lightweight generic graph library that supports 
 - node properties
