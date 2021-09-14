@@ -78,15 +78,13 @@ namespace graph_lite {
             EdgeDirection direction, MultiEdge multi_edge, SelfLoop self_loop,
             Map adj_list_spec, Container neighbors_container_spec>
     class Serializer {
+    public:
         using GType = Graph<NodeType, NodePropType, EdgePropType, direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec>;
     private:  // formatting settings
         // no line wrap by default
         size_t max_num_nodes_per_line = (size_t)-1;
         size_t max_num_edges_per_line = (size_t)-1;
     private:
-        void log(const std::string& msg) const {
-            std::cerr << msg << '\n';
-        }
         void add_indent(std::ostream& os, size_t indent) const {
             for (size_t i = 0; i < indent; ++i) {
                 os << '\t';
@@ -113,13 +111,13 @@ namespace graph_lite {
                 }
             }();
             if constexpr(std::is_void_v<PT>) {
-                log("no " + node_or_edge + " property needed at all");
+                std::cerr << "no " << node_or_edge << " property needed at all\n";
             } else if (fmt.fmt.has_value()) {
-                log("using " + node_or_edge + " formatter provided");
+                std::cerr << "using " << node_or_edge << " formatter provided\n";
             } else if constexpr(detail::is_either_map_v<PT>) {
-                log(node_or_edge + " prop is a map/unordered_map; using map serializer");
+                std::cerr << node_or_edge << " prop is a map/unordered_map; using map serializer\n";
             } else if constexpr(detail::is_streamable_v<PT>) {
-                log(node_or_edge + " is by itself serializable; populating the field \"label\"");
+                std::cerr << node_or_edge + " is by itself serializable; populating the field \"label\"\n";
             } else {
                 throw std::runtime_error("failed to serialize " + node_or_edge + " properties");
             }
@@ -196,6 +194,7 @@ namespace graph_lite {
                 return seed;
             }
         };
+
         // basically, do a BFS...
         void serialize_edges(std::ostream& os) const {
             if (!graph.size()) {

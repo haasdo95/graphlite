@@ -1,6 +1,17 @@
 set(BINARY ${CMAKE_PROJECT_NAME}_tst)
 
-add_executable(${BINARY} main.cpp detail_test.cpp no_prop_test.cpp prop_test.cpp serializer_test.cpp test_utils.h)
+SET(TEST_SRC main.cpp detail_test.cpp no_prop_test.cpp prop_test.cpp serializer_test.cpp test_utils.h)
+SET(TEST_SRC_WITH_DOT ${TEST_SRC} deserializer_test.cpp)
+
+if (GRAPH_LITE_SUPPORT_DOT)
+    message("building test with dot support")
+    add_executable(${BINARY} ${TEST_SRC_WITH_DOT})
+    target_link_libraries(${BINARY} dot_parser)
+else()
+    message("building test without dot support")
+    add_executable(${BINARY} ${TEST_SRC})
+endif ()
+
 
 add_test(NAME ${BINARY} COMMAND ${BINARY})
 
