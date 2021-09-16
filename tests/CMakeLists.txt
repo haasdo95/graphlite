@@ -12,8 +12,10 @@ else()
     add_executable(${BINARY} ${TEST_SRC})
 endif ()
 
+set_target_properties(${BINARY} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 
-add_test(NAME ${BINARY} COMMAND ${BINARY})
+
+add_test(NAME ${BINARY} COMMAND ${BINARY} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 
 target_link_libraries(${BINARY} gtest ${CMAKE_PROJECT_NAME})
 

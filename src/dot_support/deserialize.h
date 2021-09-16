@@ -33,7 +33,7 @@ namespace graph_lite {
         using M = std::map<std::string, std::string>;
 
         void check_validity(const dot_parser::dot_graph_flat& g) const {
-            if ((multi_edge==MultiEdge::ALLOWED) != g.is_strict) {
+            if ((multi_edge==MultiEdge::DISALLOWED) != g.is_strict) {
                 throw std::runtime_error("inconsistent graph strictness; "
                                          "make sure to disallow multi-edges for strict graphs/allow multi-edges for non-strict graphs");
             }
@@ -43,15 +43,8 @@ namespace graph_lite {
             }
         }
 
-        template<typename PT>
-        static constexpr bool is_convertible_from_map = std::is_constructible_v<PT, typename M::const_iterator, typename M::const_iterator>;
-
-        enum class prop_converter_resolv {
-            VOID, USER_DEF, MAP_CONV
-        };
-
         template<bool is_node>
-        prop_converter_resolv resolve_prop_converter() const {
+        void resolve_prop_converter() const {
             using PT = std::conditional_t<is_node, NodePropType, EdgePropType>;
             std::string node_or_edge = is_node ? "node" : "edge";
             const detail::converter<PT>& conv = [this]() -> auto& {
@@ -63,14 +56,11 @@ namespace graph_lite {
             }();
             // case by case
             if constexpr(std::is_void_v<PT>) {
-                std::cerr << node_or_edge << " property is void; ignoring ALL parsed attrs\n";
-                return prop_converter_resolv::VOID;
+                std::cerr << "Deserializer: " << node_or_edge << " property is void; ignoring ALL parsed attrs\n";
             } else if (conv.conv.has_value()) {
-                std::cerr << "using " << node_or_edge << " converter provided\n";
-                return prop_converter_resolv::USER_DEF;
-            } else if constexpr(is_convertible_from_map<PT>) {
-                std::cerr << node_or_edge << " prop can be directly converted from parsed string pairs; converting\n";
-                return prop_converter_resolv::MAP_CONV;
+                std::cerr << "Deserializer: " << "using " << node_or_edge << " converter provided\n";
+            } else if constexpr(detail::is_either_map_v<PT>) {
+                std::cerr << "Deserializer: " << node_or_edge << " prop can be directly converted from parsed string pairs; converting\n";
             } else {
                 throw std::runtime_error("failed to resolve " + node_or_edge + " property converter");
             }
@@ -78,17 +68,17 @@ namespace graph_lite {
 
         std::function<NodeType(const std::string&)> resolve_node_name_converter() const {
             if (node_name_conv.has_value()) {
-                std::cerr << "using node name converter provided\n";
+                std::cerr << "Deserializer: using node name converter provided\n";
                 return [this](const std::string& node_name) -> NodeType {
                     return node_name_conv.value()(node_name);
                 };
             } else if constexpr(std::is_constructible_v<NodeType, std::string>) {
-                std::cerr << "NodeType can be implicitly/explicitly converted from the parsed string\n";
+                std::cerr << "Deserializer: NodeType can be implicitly/explicitly converted from the parsed string\n";
                 return [](const std::string& node_name) -> NodeType {
                     return static_cast<NodeType>(node_name);
                 };
             } else if constexpr(std::is_integral_v<NodeType>) {
-                std::cerr << "NodeType is an integral type; using std::stoi for conversion\n";
+                std::cerr << "Deserializer: NodeType is an integral type; using std::stoi for conversion\n";
                 return [](const std::string& node_name) -> NodeType {
                     return std::stoi(node_name);
                 };
@@ -100,8 +90,8 @@ namespace graph_lite {
         GType deserialize_impl(const dot_parser::dot_graph_raw& raw_graph) const {
             auto flat_graph = dot_parser::flatten(dot_parser::resolve(raw_graph));
             auto convert_to_node_type = resolve_node_name_converter();
-            prop_converter_resolv node_resolv = resolve_prop_converter<true>();
-            prop_converter_resolv edge_resolv = resolve_prop_converter<false>();
+            resolve_prop_converter<true>();
+            resolve_prop_converter<false>();
             check_validity(flat_graph);
             // start constructing graph
             GType g;
@@ -112,15 +102,14 @@ namespace graph_lite {
                     if constexpr(std::is_void_v<NodePropType>) {
                         g.add_nodes(std::move(node));
                     } else {
-                        static_assert(node_resolv!=prop_converter_resolv::VOID);
                         M attrs {ns.attrs.begin(), ns.attrs.end()};
-                        if (node_resolv==prop_converter_resolv::MAP_CONV) {
+                        if constexpr(detail::is_either_map_v<NodePropType>) {
                             // constructed from parsed map
                             g.add_node_with_prop(std::move(node),
                                                  attrs.begin(), attrs.end());
                         } else {
                             // user-defined converter
-                            assert(node_resolv==prop_converter_resolv::USER_DEF);
+                            assert(node_conv.conv.has_value());
                             g.add_node_with_prop(std::move(node),
                                                  node_conv.conv.value()(attrs));
                         }
@@ -135,19 +124,17 @@ namespace graph_lite {
                         NodeType tgt = convert_to_node_type(e.tgt);
                         if constexpr(std::is_void_v<EdgePropType>) {
                             g.add_edge(std::move(src), std::move(tgt));
+                        } else if constexpr(detail::is_either_map_v<EdgePropType>) {
+                            // constructed from parsed map
+                            g.add_edge_with_prop(std::move(src), std::move(tgt),
+                                                 attrs.begin(), attrs.end());
                         } else {
-                            static_assert(edge_resolv!=prop_converter_resolv::VOID);
-                            if (edge_resolv==prop_converter_resolv::MAP_CONV) {
-                                // constructed from parsed map
-                                g.add_edge_with_prop(std::move(src), std::move(tgt),
-                                                     attrs.begin(), attrs.end());
-                            } else {
-                                // user-defined converter
-                                assert(node_resolv==prop_converter_resolv::USER_DEF);
-                                g.add_edge_with_prop(std::move(src), std::move(tgt),
-                                                     edge_conv.conv.value()(attrs));
-                            }
+                            // user-defined converter
+                            assert(edge_conv.conv.has_value());
+                            g.add_edge_with_prop(std::move(src), std::move(tgt),
+                                                 edge_conv.conv.value()(attrs));
                         }
+
                     }
                 }
             }
@@ -155,7 +142,7 @@ namespace graph_lite {
         }
 
     private:
-        std::optional<std::function<NodeType(std::string)>> node_name_conv;
+        std::optional<std::function<NodeType(const std::string&)>> node_name_conv;
         detail::converter<NodePropType> node_conv;
         detail::converter<EdgePropType> edge_conv;
     public:
@@ -185,7 +172,7 @@ namespace graph_lite {
             static_assert(std::is_assignable_v<decltype(edge_conv.conv), F>);
             edge_conv.conv = f;
         }
-        void delete_edge_prop_formatter() {
+        void delete_edge_prop_converter() {
             static_assert(not std::is_void_v<EdgePropType>, "no edge prop needed at all");
             edge_conv.conv = std::nullopt;
         }

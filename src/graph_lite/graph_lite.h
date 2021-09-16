@@ -48,6 +48,41 @@ namespace graph_lite::detail {
     template<typename T>
     constexpr bool is_list_v = std::is_same_v<T, std::vector<typename T::value_type, typename T::allocator_type>>;
 
+    // determine if type is map or unordered_map
+    template <typename T, typename U = void>
+    struct is_map: std::false_type {};
+    template<typename T>
+    struct is_map<T, std::void_t<typename T::key_type,
+                                 typename T::mapped_type,
+                                 typename T::key_compare,
+                                 typename T::allocator_type>> {
+        static constexpr bool value = std::is_same_v<T, std::map<typename T::key_type,
+                                                                 typename T::mapped_type,
+                                                                 typename T::key_compare,
+                                                                 typename T::allocator_type>>;
+    };
+    template<typename T>
+    constexpr bool is_map_v = is_map<T>::value;
+
+    template <typename T, typename U = void>
+    struct is_unordered_map: std::false_type {};
+    template<typename T>
+    struct is_unordered_map<T, std::void_t<typename T::key_type,
+                                           typename T::mapped_type,
+                                           typename T::hasher,
+                                           typename T::key_equal,
+                                           typename T::allocator_type>> {
+        static constexpr bool value = std::is_same_v<T, std::unordered_map<typename T::key_type,
+                                                                           typename T::mapped_type,
+                                                                           typename T::hasher,
+                                                                           typename T::key_equal,
+                                                                           typename T::allocator_type>>;
+    };
+    template<typename T>
+    constexpr bool is_unordered_map_v = is_unordered_map<T>::value;
+    template<typename T>
+    constexpr bool is_either_map_v = is_map_v<T> or is_unordered_map_v<T>;
+
     // CREDIT: https://stackoverflow.com/questions/765148/how-to-remove-constness-of-const-iterator
     template <typename ContainerType, typename ConstIterator>
     typename ContainerType::iterator const_iter_to_iter(ContainerType& c, ConstIterator it) {

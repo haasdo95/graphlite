@@ -1,2 +1,7 @@
 .idea
 cmake-build-*
+
+tests/bin/*
+!tests/bin/.keep
+
+Testing

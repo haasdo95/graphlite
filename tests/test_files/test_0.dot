@@ -1,0 +1,15 @@
+/*
+    a directed non-strict graph with node and edge properties
+*/
+
+digraph dg {
+    graph [loc=top]
+    // nodes
+    node [color="noir"]
+    A[color=blanc]; B; C; D; E; F; G[color="rouge"];  // diff color for two ends
+    // edges
+    edge[color="noir"]
+    {A B}->{C D}[dist=1]
+    {C D} -> {E F} -> G -> {G G G} /* three self loops yeah */ [dist=2]
+    X; X->{A, A}->X[dist=3];
+}

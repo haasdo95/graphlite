@@ -6,44 +6,10 @@
 
 namespace graph_lite {
     namespace detail {
-        template <typename T, typename U = void>
-        struct is_map: std::false_type {};
-        template<typename T>
-        struct is_map<T, std::void_t<typename T::key_type,
-                                     typename T::mapped_type,
-                                     typename T::key_compare,
-                                     typename T::allocator_type>> {
-            static constexpr bool value = std::is_same_v<T, std::map<typename T::key_type,
-                                                                    typename T::mapped_type,
-                                                                    typename T::key_compare,
-                                                                    typename T::allocator_type>>;
-        };
-        template<typename T>
-        constexpr bool is_map_v = is_map<T>::value;
-
-        template <typename T, typename U = void>
-        struct is_unordered_map: std::false_type {};
-        template<typename T>
-        struct is_unordered_map<T, std::void_t<typename T::key_type,
-                                                typename T::mapped_type,
-                                                typename T::hasher,
-                                                typename T::key_equal,
-                                                typename T::allocator_type>> {
-            static constexpr bool value = std::is_same_v<T, std::unordered_map<typename T::key_type,
-                                                                                typename T::mapped_type,
-                                                                                typename T::hasher,
-                                                                                typename T::key_equal,
-                                                                                typename T::allocator_type>>;
-        };
-        template<typename T>
-        constexpr bool is_unordered_map_v = is_unordered_map<T>::value;
-
-        template<typename T>
-        constexpr bool is_either_map_v = is_map_v<T> or is_unordered_map_v<T>;
-
         // serialize properties if they are map/unordered_map
         template<typename M>
         void serialize_map_like(std::ostream& os, const M& m) {
+            static_assert(is_either_map_v<M>);
             static_assert(is_streamable_v<typename M::key_type>
                       and is_streamable_v<typename M::mapped_type>,
                       "both key and value in property pair key=value should be serializable");
@@ -55,15 +21,6 @@ namespace graph_lite {
                     os << ", ";
                 }
             }
-        }
-
-        template<typename K, typename V>
-        void serialize_prop(std::ostream& os, const std::map<K, V>& m) {
-            serialize_map_like(os, m);
-        }
-        template<typename K, typename V>
-        void serialize_prop(std::ostream& os, const std::unordered_map<K, V>& m) {
-            serialize_map_like(os, m);
         }
 
         template <typename PT>
@@ -111,13 +68,13 @@ namespace graph_lite {
                 }
             }();
             if constexpr(std::is_void_v<PT>) {
-                std::cerr << "no " << node_or_edge << " property needed at all\n";
+                std::cerr << "Serializer: " << "no " << node_or_edge << " property needed at all\n";
             } else if (fmt.fmt.has_value()) {
-                std::cerr << "using " << node_or_edge << " formatter provided\n";
+                std::cerr << "Serializer: " << "using " << node_or_edge << " formatter provided\n";
             } else if constexpr(detail::is_either_map_v<PT>) {
-                std::cerr << node_or_edge << " prop is a map/unordered_map; using map serializer\n";
+                std::cerr << "Serializer: " << node_or_edge << " prop is a map/unordered_map; using map serializer\n";
             } else if constexpr(detail::is_streamable_v<PT>) {
-                std::cerr << node_or_edge + " is by itself serializable; populating the field \"label\"\n";
+                std::cerr << "Serializer: " << node_or_edge + " is by itself serializable; populating the field \"label\"\n";
             } else {
                 throw std::runtime_error("failed to serialize " + node_or_edge + " properties");
             }
@@ -140,7 +97,7 @@ namespace graph_lite {
                     os << "]; ";
                 } else if constexpr(detail::is_either_map_v<NodePropType>) {
                     os << node << '[';
-                    detail::serialize_prop(os, graph.node_prop(it));
+                    detail::serialize_map_like(os, graph.node_prop(it));
                     os << "]; ";
                 } else if constexpr(detail::is_streamable_v<NodePropType>) {
                     os << node << "[label=\"" << graph.node_prop(it) << "\"]; ";
@@ -175,7 +132,7 @@ namespace graph_lite {
                 os << "]; ";
             } else if constexpr(detail::is_either_map_v<EdgePropType>){
                 os << '[';
-                detail::serialize_prop(os, n_it->second.prop());
+                detail::serialize_map_like(os, n_it->second.prop());
                 os << "]; ";
             } else if constexpr(detail::is_streamable_v<EdgePropType>) {
                 os << "[label=\"" << n_it->second.prop() << "\"]; ";
