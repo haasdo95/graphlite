@@ -12,6 +12,7 @@
 #include <memory>
 #include <type_traits>
 #include <cassert>
+#include <iostream>
 
 // container spec
 namespace graph_lite {
