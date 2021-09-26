@@ -119,56 +119,41 @@ Iterator begin() noexcept;
 Iterator end() noexcept;
 ConstIterator begin() const noexcept;
 ConstIterator end() const noexcept;
-ConstIterator cbegin() noexcept;
-ConstIterator cend() noexcept;
 ```
 which enables the following loops for graph traversal
 ```c++
 for (auto it=g.begin(); it!=g.end(); ++it) {
     // classic for loop
 }
-for (auto&& v: g) {
+for (const auto& v: g) {
     // range-based for loop
 }
 ```
-Neither of the above will be very useful without knowing how the iterators are dereferenced through `operator*`. The return value of `operator*` depends on (1) constness of the iterator (2) whether node prop is needed (3) whether the graph is directed or undirected. `*it` gives a 3-tuple `(node, node_prop, neighbors_view)` if node prop is needed, or a 2-tuple `(node, neighbors_view)` if node prop is not needed. 
 
 *Examples*
 ```c++
 // NodePropType is void
 Graph<int> g; 
-for (auto&& [node, neighbors_view]: g) {
-    // node has type const int& for the same reason why map keys are const references
+for (const int& node: g) {  // print out all nodes
+    std::cout << node << " ";
 }
 
 // NodePropType is double
-Graph<int, double> g_non_const;  
-for (auto&& [node, node_prop, neighbors_view]: g_non_const) {
-    // node has type const int&
-    // node_prop has type double&
-    node_prop = 0.0; // zero out all node prop
+Graph<int, double> g_non_const;
+// not using range-for here saves one look-up
+for (auto it=g_non_const.begin(); it!=g_non_const.end(); ++it) {
+    // g_non_const.node_prop(*it) = 0.0; // this does the same as the line below
+    g_non_const.node_prop(it) = 0.0; // zero out all node prop
 }
 
 // g_const is const
 const Graph<int, double>& g_const = g_non_const;
-for (auto&& [node, node_prop, neighbors_view]: g_const) {
-    // node has type const int&
-    // node_prop has type const double& 
-    // node_prop = 0.0; WON'T COMPILE! node_prop is const ref
-}
-```
-Of course, we don't have to use structured binding. After all, it's just a syntax sugar for 
-```c++
-for (auto it=g_non_const.begin(); it!=g_non_const.end(); ++it) {
-    std::get<1>(*it) = 0.0; // zero out all node prop
-}
 for (auto it=g_const.begin(); it!=g_const.end(); ++it) {
-    // std::get<1>(*it) = 0.0; WON'T COMPILE! assigning to const ref
+    // g_const.node_prop(it) = 0.0; WON'T COMPILE! node_prop returns const ref
 }
 ```
 
 ### Neighbor Iterators
-You might have noticed that we haven't talked about the type of `neighbors_view`, which is what we're about to do now. 
 Just as `Iterator/ConstIterator` iterates through the adjacency list, 
 ```c++
 typename GType::NeighborsConstIterator const_nbr_it;
@@ -183,41 +168,21 @@ const EdgePropType& prop() const  // called by const_nbr_it->second.prop()
 EdgePropType& prop()  // called by nbr_it->second.prop()
 ```
 
-*Examples*
-
-the following code snippet zeros out the edge property if the end node has value 42
-```c++
-if (nbr_it->first == 42) {
-    nbr_it->second.prop() = 0.0;
-}
-```
-
-Instead of returning a reference to the actual neighbor container, this library always returns a pair of neighbor iterators, also known as a `NeighborsView`, defined below
+Instead of returning a reference to the actual neighbor container, this library returns a pair of neighbor iterators, also known as a `NeighborsView`, defined below
 ```c++
 using NeighborsView = std::pair<NeighborsIterator, NeighborsIterator>;
 using NeighborsConstView = std::pair<NeighborsConstIterator,
                                      NeighborsConstIterator>;
 ```
 
-For `UNDIRECTED` graphs, `NeighborsView` and `NeighborsConstView` are exactly the types of `neighbors_view` from the previous section. 
-
-However, for `DIRECTED` graphs, a node can have both in-neighbors and out-neighbors. If we have two nodes, u, v, and a directed edge (u -> v), then u is an in-neighbor of v and v is an out-neighbor of u. To describe the two types of neighbors, we need two neighbor views instead of one, using the following template
-```c++
-template<typename T>
-struct OutIn {
-    T out;
-    T in;
-}
-```
-`OutIn<NeighborsView>` and `OutIn<NeighborsConstView>` are the type of `neighbors_view` for directed graphs. Indeed, using another `std::pair` could work, but memorizing which is first and which is second is a non-trivial task. 
+For `UNDIRECTED` graphs, we can query the neighbors of a node by calling the member function `neighbors`; meanwhile, for `DIRECTED` graphs, a node can have both in-neighbors and out-neighbors. If we have two nodes, u, v, and a directed edge (u -> v), then u is an in-neighbor of v and v is an out-neighbor of u. We query the out/in-neighbors of a node in a directed graph by calling `out_neighbors` or `in_neighbors`.
 
 *Examples*
 ```c++
 // graphs with (1) no node property (2) edge property with type double
 Graph<int, void, double, EdgeDirection::UNDIRECTED> udg;
-for (auto&& [node, neighbors_view]: udg) {
-    // neighbors_view has type NeighborsView
-    auto [nbr_begin, nbr_end] = neighbors_view;
+for (auto it=udg.begin(); it!=udg.end(); ++it) {
+    auto [nbr_begin, nbr_end] = udg.neighbors(it);
     for (auto nbr_it=nbr_begin; nbr_it!=nbr_end; ++nbr_it) {
         // zero out edge property for edge (node, 42)
         if (nbr_it->first==42) {
@@ -228,35 +193,24 @@ for (auto&& [node, neighbors_view]: udg) {
 
 // edge property is immutable for a const graph
 const auto& const_udg = udg;
-for (auto&& [node, neighbors_view]: udg) {
-    // neighbors_view has type NeighborsConstView
-    // nbr_it->second.prop() has type const double& 
-    auto [nbr_begin, nbr_end] = neighbors_view;
+for (auto it=const_udg.begin(); it!=const_udg.end(); ++it) {
+    auto [nbr_begin, nbr_end] = const_udg.neighbors(it);
     for (auto nbr_it=nbr_begin; nbr_it!=nbr_end; ++nbr_it) {
-        if (nbr_it->first==42) {
+        if (nbr_it->first==42) { // nbr_it->second.prop() has type const double&
             // nbr_it->second.prop() = 0.0; WON'T COMPILE!
         }
     }
 }
 
-// directed graphs requires more neighbor information
+// directed graphs
 Graph<int, void, double, EdgeDirection::DIRECTED> dg;
-for (auto&& [node, neighbors_view]: udg) {
-    // neighbors_view has type OutIn<NeighborsView>
-    auto [out_nbr_begin, out_nbr_end] = neighbors_view.out;
-    auto [in_nbr_begin, in_nbr_end] = neighbors_view.in;
+for (auto it=dg.begin(); it!=dg.end(); ++it) {
+    auto [out_nbr_begin, out_nbr_end] = dg.out_neighbors(it);
     for (auto out_nbr_it=out_nbr_begin; 
               out_nbr_it!=out_nbr_end; ++out_nbr_it) {
         // zero out edge property for edge (node -> 42)
         if (out_nbr_it->first==42) {
             out_nbr_it->second.prop() = 0.0;
-        }
-    }
-    for (auto in_nbr_it=in_nbr_begin; 
-              in_nbr_it!=in_nbr_end; ++in_nbr_it) {
-        // zero out edge property for edge (node <- 24)
-        if (in_nbr_it->first==24) {
-            in_nbr_it->second.prop() = 0.0;
         }
     }
 }

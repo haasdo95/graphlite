@@ -390,9 +390,7 @@ TYPED_TEST(DemoNoMultiEdge, undirected) {
     auto alice_pos = g.find("Alice");
     auto out_nbrs_by_it = g.neighbors(alice_pos);
     auto out_nbrs_by_value = g.neighbors("Alice");
-    auto out_nbrs_by_raw_it = std::get<2>(*alice_pos);  // 3 ways to get neighbor view
     ASSERT_EQ(out_nbrs_by_it, out_nbrs_by_value);
-    ASSERT_EQ(out_nbrs_by_value, out_nbrs_by_raw_it);
     ASSERT_ANY_THROW(g.neighbors("alice"));
     ASSERT_EQ(g.count_edges("Alice", "Bob"), 1);
     ASSERT_EQ(g.count_edges("alice", "bob"), 0);
@@ -426,7 +424,7 @@ TYPED_TEST(DemoNoMultiEdge, undirected) {
     auto [found_a_again, it_a_again] = g.find_neighbor(alice_pos, "Cyrus");
     ASSERT_TRUE(found_a_again);
     ASSERT_EQ(g.remove_edge(alice_pos, it_a_again), 1);
-    auto c_nbrs = std::get<2>(*(g.find("Cyrus")));
+    auto c_nbrs = g.neighbors(g.find("Cyrus"));
     ASSERT_EQ(std::distance(c_nbrs.first, c_nbrs.second), 0); // should be no neighbor left
     // access helper for node prop
     int& c_prop = g.node_prop("Cyrus");
@@ -448,19 +446,11 @@ TYPED_TEST(DemoNoMultiEdge, directed) {
     g.add_node_with_prop(2, "B");
     g.add_node_with_prop(3, std::string{"C"});
     ASSERT_EQ(g.size(), 3);
-    for (auto it = g.begin(); it != g.end(); ++it) {  // that's one way to use it
-        auto&& [node, prop, nbrs] = *it;
-        std::get<1>(*it) += std::get<1>(*it);
+    for (const auto& node: g) {  // range loop
+        ASSERT_TRUE(node <= 3);
     }
     for (auto it=g.begin(); it!=g.end(); ++it) {  // better use the helper method node_prop
-        g.node_prop(it) = g.node_prop(it).substr(g.node_prop(it).size()/2);
-    }
-    for (auto&& [node, prop, nbrs]: g) {  // structural binding is even better
-        prop += "123";
-    }
-    for (const auto& [node, prop, nbr]: g) {  // g is not const, meaning the prop is NOT a const ref
-        std::cout << node << ": " << prop << "\n";
-        prop += "not const!";  // the tuple from (*it) is const qualified, but not the reference inside it
+        g.node_prop(it) += "123";
     }
     const auto & cg = g;
     auto cbegin = cg.begin();
@@ -468,43 +458,42 @@ TYPED_TEST(DemoNoMultiEdge, directed) {
     //    auto begin = g.begin();
     //    begin = cg.begin();  // the other way around should not work; losing const-ness
 
-    for (auto&& [node, prop, nbr]: cg) {  // the string should be const now
-        std::cout << node << ": " << prop << "\n";
-        //        prop = "const now...";  // this does not compile, as expected
-        //        cg.node_prop(node) = "should not work, either";  // for the same reason as above
+    for (auto it=cg.begin(); it!=cg.end(); ++it) {  // the string should be const now
+        std::cout << *it << ": " << cg.node_prop(it) << "\n";
+        //        cg.node_prop(it) = "should not work, either";  // for the same reason as above
     }
 
     ASSERT_EQ(g.remove_edge(1, 1), 0);  // no-op to remove a non-existing edge
     ASSERT_EQ(g.remove_edge(1, 2), 0);  // no-op to remove a non-existing edge
 
-    for (auto&& [node, prop, _]: g) {
-        for (auto&& [node_other, prop_other, _1]: g) {
-            std::cout << "adding edge between " << node << " and " << node_other << std::endl;
-            int num_added = g.add_edge_with_prop(node, node_other, static_cast<double>(node - node_other));
-            ASSERT_TRUE(node==node_other or num_added==1);
+    for (auto it_i=g.begin(); it_i!=g.end(); ++it_i) {
+        for (auto it_j=g.begin(); it_j!=g.end(); ++it_j) {
+            std::cout << "adding edge between " << *it_i << " and " << *it_j << std::endl;
+            int num_added = g.add_edge_with_prop(it_i, it_j, static_cast<double>(*it_i - *it_j));
+            ASSERT_TRUE(*it_i==*it_i or num_added==1);
         }
     }
 
-    for (auto && [node, prop, nbrs]: cg) {
-        auto [out_begin, out_end] = nbrs.out;
-        for (auto it=out_begin; it!=out_end; ++it) {
-            //            it->second.prop() = 777;  // should NOT be assignable
-            ASSERT_EQ(it->second.prop(), node-it->first);
-            std::cout << "Edge Prop of Edge " << node << "->" << it->first << ": " << it->second.prop() << "\n";
+    for (auto it=cg.begin(); it!=cg.end(); ++it) {
+        auto [out_begin, out_end] = cg.out_neighbors(it);
+        for (auto n_it=out_begin; n_it!=out_end; ++n_it) {
+            //            n_it->second.prop() = 777;  // should NOT be assignable
+            ASSERT_EQ(n_it->second.prop(), *it-n_it->first);
+            std::cout << "Edge Prop of Edge " << *it << "->" << n_it->first << ": " << n_it->second.prop() << "\n";
         }
     }
 
-    for (auto&& [node, prop, nbrs]: g) {  // flip all edge props
-        auto [out_begin, out_end] = nbrs.out;
-        for (auto it=out_begin; it!=out_end; ++it) {
-            it->second.prop() = -(it->second.prop());
+    for (auto it=g.begin(); it!=g.end(); ++it) {  // flip all edge props
+        auto [out_begin, out_end] = g.template out_neighbors(it);
+        for (auto n_it=out_begin; n_it!=out_end; ++n_it) {
+            n_it->second.prop() = -(n_it->second.prop());
         }
     }
     // check edge prop flipping
-    for (auto && [node, prop, nbrs]: cg) {
-        auto [out_begin, out_end] = nbrs.out;
-        for (auto it=out_begin; it!=out_end; ++it) {
-            ASSERT_EQ(it->second.prop(), it->first-node);
+    for (auto it=cg.begin(); it!=cg.end(); ++it) {
+        auto [out_begin, out_end] = g.template out_neighbors(it);
+        for (auto n_it=out_begin; n_it!=out_end; ++n_it) {
+            ASSERT_EQ(n_it->second.prop(), n_it->first-*it);
         }
     }
 }

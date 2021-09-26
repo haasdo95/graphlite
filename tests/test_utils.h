@@ -142,23 +142,23 @@ template<typename GraphType>
 void flip(GraphType& g) {
     int n = static_cast<int>(g.size());
     std::vector<std::pair<int, int>> v;
-    for (auto&& [node, nbrs]: g) {
+    for (auto it=g.begin(); it!=g.end(); ++it) {
         typename GraphType::NeighborsIterator n_begin;
         typename GraphType::NeighborsIterator n_end;
         if constexpr(GraphType::DIRECTION==EdgeDirection::DIRECTED) {
-            std::tie(n_begin, n_end) = nbrs.out;
+            std::tie(n_begin, n_end) = g.out_neighbors(it);
         } else {
-            std::tie(n_begin, n_end) = nbrs;
+            std::tie(n_begin, n_end) = g.neighbors(it);
         }
-        for (auto it=n_begin; it!=n_end; ++it) {
-            const int& out_neighbor = [&it]{
+        for (auto n_it=n_begin; n_it!=n_end; ++n_it) {
+            const int& out_neighbor = [&n_it]{
                 if constexpr(std::is_void_v<typename GraphType::edge_prop_type>) {
-                    return *it;
+                    return *n_it;
                 } else {
-                    return it->first;
+                    return n_it->first;
                 }
             }();
-            v.emplace_back(node, out_neighbor);
+            v.emplace_back(*it, out_neighbor);
         }
     }
     for (const auto& [src, tgt]: v) {

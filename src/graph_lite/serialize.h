@@ -88,7 +88,7 @@ namespace graph_lite {
             typename GType::ConstIterator begin = graph.begin();
             typename GType::ConstIterator end = graph.end();
             for (auto it=begin; it!=end; ++it) {
-                const auto& node = std::get<0>(*it);
+                const auto& node = *it;
                 // case-by-case on NodePropType
                 if constexpr(std::is_void_v<NodePropType>) {
                     os << node << "; ";
@@ -170,7 +170,7 @@ namespace graph_lite {
             add_indent(os, 1);
             size_t edge_count = 0;
             for (auto it=begin; it!=end; ++it) {
-                const auto& root = std::get<0>(*it);
+                const auto& root = *it;
                 if (visited_nodes.count(root)) { continue; }  // skip nodes from visited connected components
                 queue.emplace_back(root);
                 visited_nodes.insert(root);

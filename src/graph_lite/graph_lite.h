@@ -779,13 +779,6 @@ namespace graph_lite {
         using NeighborsView = std::pair<NeighborsIterator, NeighborsIterator>;
         using NeighborsConstView = std::pair<NeighborsConstIterator, NeighborsConstIterator>;
     private:
-        // if directed, return iter pair for out-neighbors and then for in-neighbors
-        using FullNeighborsConstReturnType = std::conditional_t<direction==EdgeDirection::UNDIRECTED,
-                                                                NeighborsConstView,
-                                                                detail::OutIn<NeighborsConstView>>;
-        using FullNeighborsReturnType = std::conditional_t<direction==EdgeDirection::UNDIRECTED,
-                                                           NeighborsView,
-                                                           detail::OutIn<NeighborsView>>;
         using AdjListIterType = typename AdjListType::iterator;
         using AdjListConstIterType = typename AdjListType::const_iterator;
     private:
@@ -798,27 +791,15 @@ namespace graph_lite {
             template<bool>
             friend class Iter;
             friend class Graph;
-            using SelfT = std::conditional_t<IsConst, const Graph*, Graph*>;
             using AdjIterT = std::conditional_t<IsConst, AdjListConstIterType, AdjListIterType>;
             AdjIterT it;
-            SelfT self;
-            // here NodePropType& is a non-const-reference, meaning that it can be directly modified
-            using NbrT = std::conditional_t<IsConst, FullNeighborsConstReturnType, FullNeighborsReturnType>;
-            template<typename NT, typename NPT>
-            struct VT {  // when node prp is needed
-                using type = std::tuple<const NT&, std::conditional_t<IsConst, const NodePropType&, NodePropType&>, NbrT>;
-            };
-            template<typename NT>
-            struct VT<NT, void> {  // when no node prop is needed
-                using type = std::tuple<const NT&, NbrT>;
-            };
-            using ValueType = typename VT<NodeType, NodePropType>::type;
         public:
             Iter()=default;
-            Iter(SelfT g, AdjIterT it): self{g}, it{it} {};
+            Iter(AdjIterT it): it{it} {};
 
+            // enables implicit conversion from non-const to const
             template<bool WasConst, typename=std::enable_if_t<IsConst or !WasConst>>
-            Iter(const Iter<WasConst>& other): self{other.self}, it{other.it} {}
+            Iter(const Iter<WasConst>& other): it{other.it} {}
 
             Iter& operator++() {  // prefix
                 ++it;
@@ -829,12 +810,11 @@ namespace graph_lite {
                 ++(*this);
                 return tmp;
             }
-            ValueType operator*() {
-                if constexpr(not has_node_prop) {
-                    return std::forward_as_tuple(it->first, self->get_full_neighbors(it));
-                } else {
-                    return std::forward_as_tuple(it->first, it->second.prop, self->get_full_neighbors(it));
-                }
+            const NodeType& operator*() const {
+                return it->first;
+            }
+            const NodeType* operator->() const {
+                return &(it->first);
             }
             friend bool operator==(const Iter& lhs, const Iter& rhs) { return lhs.it == rhs.it; }
             friend bool operator!=(const Iter& lhs, const Iter& rhs) { return lhs.it != rhs.it; }
@@ -845,40 +825,12 @@ namespace graph_lite {
         using ConstIterator = Iter<true>;
         static_assert(std::is_convertible_v<Iterator, ConstIterator>);
 
-        Iterator begin() noexcept { return Iter<false>(this, adj_list.begin()); }
-        Iterator end() noexcept { return Iter<false>(this, adj_list.end()); }
-        ConstIterator begin() const noexcept { return Iter<true>(this, adj_list.cbegin()); }
-        ConstIterator end() const noexcept { return Iter<true>(this, adj_list.cend()); }
-        ConstIterator cbegin() noexcept { return Iter<true>(begin()); }
-        ConstIterator cend() noexcept { return Iter<true>(end()); }
+        Iterator begin() noexcept { return Iter<false>(adj_list.begin()); }
+        Iterator end() noexcept { return Iter<false>(adj_list.end()); }
+        ConstIterator begin() const noexcept { return Iter<true>(adj_list.cbegin()); }
+        ConstIterator end() const noexcept { return Iter<true>(adj_list.cend()); }
         // END OF iterator support
     private:  // neighbor access helpers
-        FullNeighborsConstReturnType get_full_neighbors(AdjListConstIterType adj_iter) const {
-            const NeighborsContainerType& out_neighbors = get_out_neighbors(adj_iter);
-            if constexpr(direction==EdgeDirection::UNDIRECTED) {
-                return {out_neighbors.begin(), out_neighbors.end()};
-            } else {
-                const NeighborsContainerType& in_neighbors = get_in_neighbors(adj_iter);
-                return detail::OutIn<std::pair<NeighborsConstIterator, NeighborsConstIterator>>{
-                    .out=std::make_pair(out_neighbors.begin(), out_neighbors.end()),
-                    .in=std::make_pair(in_neighbors.begin(), in_neighbors.end())
-                };
-            }
-        }
-
-        FullNeighborsReturnType get_full_neighbors(AdjListIterType adj_iter) {
-            NeighborsContainerType& out_neighbors = get_out_neighbors(adj_iter);
-            if constexpr(direction==EdgeDirection::UNDIRECTED) {
-                return {out_neighbors.begin(), out_neighbors.end()};
-            } else {
-                NeighborsContainerType& in_neighbors = get_in_neighbors(adj_iter);
-                return detail::OutIn<std::pair<NeighborsIterator, NeighborsIterator>>{
-                    .out=std::make_pair(out_neighbors.begin(), out_neighbors.end()),
-                    .in=std::make_pair(in_neighbors.begin(), in_neighbors.end())
-                };
-            }
-        }
-
         const NeighborsContainerType& get_out_neighbors(AdjListConstIterType adj_iter) const {
             if constexpr(not has_node_prop) {
                 if constexpr(direction==EdgeDirection::UNDIRECTED) { return adj_iter->second; }
@@ -976,7 +928,6 @@ namespace graph_lite {
             return detail::const_iter_to_iter(adj_list,
                                               static_cast<const Graph*>(this)->find_node(node_identifier));
         }
-        // END OF find node without checking existence
 
         template<typename T>
         static constexpr bool is_iterator() {
@@ -1013,8 +964,7 @@ namespace graph_lite {
         // helper method to provide better error messages
         template<typename T>
         std::ostream& print_by_iter_or_by_value(std::ostream& os, const T& iter_or_val) const {
-            if constexpr(std::is_same_v<ConstIterator, detail::remove_cv_ref_t<T>>
-                         or std::is_same_v<Iterator, detail::remove_cv_ref_t<T>>) {  // by iter
+            if constexpr(is_iterator<T>()) {  // by iter
                 return os;  // no-op if by iter
             } else {  // by value
                 static_assert(can_construct_node<T>);
@@ -1090,10 +1040,10 @@ namespace graph_lite {
             AdjListConstIterType tgt_pos = find_by_iter_or_by_value(target_iv);
             if (src_pos==adj_list.end() or tgt_pos==adj_list.end()) {
                 if (src_pos==adj_list.end()) {
-                    print_by_iter_or_by_value(std::cerr << "(count_edge) source node not found", source_iv) << "\n";
+                    print_by_iter_or_by_value(std::cerr << "(count_edges) source node not found", source_iv) << "\n";
                 }
                 if (tgt_pos==adj_list.end()) {
-                    print_by_iter_or_by_value(std::cerr << "(count_edge) target node not found", target_iv) << "\n";
+                    print_by_iter_or_by_value(std::cerr << "(count_edges) target node not found", target_iv) << "\n";
                 }
                 return 0;
             }
@@ -1104,12 +1054,12 @@ namespace graph_lite {
         template<typename T>
         ConstIterator find(const T& node_identifier) const noexcept {
             AdjListConstIterType pos = find_node(node_identifier);
-            return ConstIterator{this, pos};
+            return ConstIterator{pos};
         }
         template<typename T>
         Iterator find(const T& node_identifier) noexcept {
             AdjListIterType pos = find_node(node_identifier);
-            return Iterator{this, pos};
+            return Iterator{pos};
         }
     private:  // edge addition helpers
         template<typename...EPT>
@@ -1232,7 +1182,7 @@ namespace graph_lite {
                     std::cerr << "(remove_edge) edge (" << src_full << ", " << tgt_full << ") not found\n";
                     return 0;
                 }
-                remove_edge(ConstIterator{this, src_pos}, src_remove_pos);
+                remove_edge(ConstIterator{src_pos}, src_remove_pos);
                 --num_of_edges;
                 return 1;
             } else {  // remove all edges between src and tgt, potentially removing no edge at all
