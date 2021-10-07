@@ -789,6 +789,12 @@ namespace graph_lite {
     private:  // iterator support
         template<bool IsConst>
         class Iter {
+        public:
+            using difference_type = typename AdjListConstIterType::difference_type;
+            using value_type = const NodeType;
+            using reference = const NodeType&;
+            using pointer = const NodeType*;
+            using iterator_category = std::bidirectional_iterator_tag;
         private:
             template<bool>
             friend class Iter;
@@ -812,6 +818,16 @@ namespace graph_lite {
                 ++(*this);
                 return tmp;
             }
+            Iter& operator--() {  // prefix
+                --it;
+                return *this;
+            }
+            Iter operator--(int) & {  // postfix
+                Iter tmp = *this;
+                --(*this);
+                return tmp;
+            }
+
             const NodeType& operator*() const {
                 return it->first;
             }
