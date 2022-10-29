@@ -40,6 +40,12 @@ namespace graph_lite {
     enum class Map {
         MAP, UNORDERED_MAP
     };
+
+    // Logging permission
+    enum class Logging {
+        ALLOWED, DISALLOWED
+    };
+
 }
 
 // type manipulation
@@ -504,11 +510,13 @@ namespace graph_lite::detail {
             auto src_pos = self->find_by_iter_or_by_value(source_iv);
             auto tgt_pos = self->find_by_iter_or_by_value(target_iv);
             if(src_pos==self->adj_list.end() or tgt_pos==self->adj_list.end()) {
-                if (src_pos==self->adj_list.end()) {
-                    self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent source", source_iv) << "\n";
-                }
-                if (tgt_pos==self->adj_list.end()) {
-                    self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent target", target_iv) << "\n";
+                if constexpr(GType::LOGGING == Logging::ALLOWED){
+                    if (src_pos==self->adj_list.end()) {
+                        self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent source", source_iv) << "\n";
+                    }
+                    if (tgt_pos==self->adj_list.end()) {
+                        self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent target", target_iv) << "\n";
+                    }
                 }
                 return 0;
             }
@@ -533,11 +541,13 @@ namespace graph_lite::detail {
             auto src_pos = self->find_by_iter_or_by_value(source_iv);
             auto tgt_pos = self->find_by_iter_or_by_value(target_iv);
             if(src_pos==self->adj_list.end() or tgt_pos==self->adj_list.end()) {
-                if (src_pos==self->adj_list.end()) {
-                    self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent source", source_iv) << "\n";
-                }
-                if (tgt_pos==self->adj_list.end()) {
-                    self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent target", target_iv) << "\n";
+                if constexpr(GType::LOGGING == Logging::ALLOWED){
+                    if (src_pos==self->adj_list.end()) {
+                        self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent source", source_iv) << "\n";
+                    }
+                    if (tgt_pos==self->adj_list.end()) {
+                        self->print_by_iter_or_by_value(std::cerr << "(add_edge) edge involves non-existent target", target_iv) << "\n";
+                    }
                 }
                 return 0;
             }
@@ -562,21 +572,22 @@ namespace graph_lite {
             MultiEdge multi_edge=MultiEdge::DISALLOWED,
             SelfLoop self_loop=SelfLoop::DISALLOWED,
             Map adj_list_spec=Map::UNORDERED_MAP,
-            Container neighbors_container_spec=Container::UNORDERED_SET>
+            Container neighbors_container_spec=Container::UNORDERED_SET,
+            Logging logging=Logging::DISALLOWED>
     class Graph: private detail::EdgePropListBase<EdgePropType>,
                  public detail::EdgeDirectionBase<Graph<NodeType, NodePropType, EdgePropType,
-                                                        direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec>, direction>,
+                                                        direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec, logging>, direction>,
                  public detail::NodePropGraphBase<Graph<NodeType, NodePropType, EdgePropType,
-                                                        direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec>, NodePropType>,
+                                                        direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec, logging>, NodePropType>,
                  public detail::EdgePropGraphBase<Graph<NodeType, NodePropType, EdgePropType,
-                                                        direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec>, EdgePropType> {
+                                                        direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec, logging>, EdgePropType> {
         // friend class with CRTP base classes
         friend detail::EdgeDirectionBase<Graph<NodeType, NodePropType, EdgePropType,
-                                               direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec>, direction>;
+                                               direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec, logging>, direction>;
         friend detail::NodePropGraphBase<Graph<NodeType, NodePropType, EdgePropType,
-                                               direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec>, NodePropType>;
+                                               direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec, logging>, NodePropType>;
         friend detail::EdgePropGraphBase<Graph<NodeType, NodePropType, EdgePropType,
-                                               direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec>, EdgePropType>;
+                                               direction, multi_edge, self_loop, adj_list_spec, neighbors_container_spec, logging>, EdgePropType>;
         static_assert(std::is_same_v<NodeType, std::remove_reference_t<NodeType>>, "NodeType should not be a reference");
         static_assert(std::is_same_v<NodeType, std::remove_cv_t<NodeType>>, "NodeType should not be cv-qualified");
         static_assert(std::is_same_v<NodePropType, std::remove_reference_t<NodePropType>>
@@ -608,6 +619,7 @@ namespace graph_lite {
         static constexpr SelfLoop SELF_LOOP = self_loop;
         static constexpr Map ADJ_LIST_SPEC = adj_list_spec;
         static constexpr Container NEIGHBORS_CONTAINER_SPEC = neighbors_container_spec;
+        static constexpr Logging LOGGING = logging;
     private:  // type gymnastics
         // handle neighbors that may have property
         // PairIterator is useful only when (1) the container is VEC or LIST and (2) edge prop is needed
@@ -881,7 +893,9 @@ namespace graph_lite {
             AdjListConstIterType pos = find_by_iter_or_by_value(node_iv);
             if (pos==adj_list.end()) {
                 std::string msg = is_out ? "out" : "in";
-                print_by_iter_or_by_value(std::cerr << "(count_neighbors) counting " << msg << "-neighbors of a non-existent node", node_iv) << "\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    print_by_iter_or_by_value(std::cerr << "(count_neighbors) counting " << msg << "-neighbors of a non-existent node", node_iv) << "\n";
+                }
                 throw std::runtime_error("counting "+ msg +"-neighbors of a non-existent node");
             }
             if constexpr(is_out) {
@@ -896,7 +910,9 @@ namespace graph_lite {
             AdjListConstIterType pos = find_by_iter_or_by_value(node_iv);
             if (pos==adj_list.end()) {
                 std::string msg = is_out ? "out" : "in";
-                print_by_iter_or_by_value(std::cerr << "(neighbors) finding "<< msg <<"-neighbors of a non-existent node", node_iv) << "\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    print_by_iter_or_by_value(std::cerr << "(neighbors) finding "<< msg <<"-neighbors of a non-existent node", node_iv) << "\n";
+                }
                 throw std::runtime_error("finding "+ msg +"-neighbors of a non-existent node");
             }
             const NeighborsContainerType& neighbors = [this, &pos]() -> auto& {
@@ -910,7 +926,9 @@ namespace graph_lite {
             AdjListIterType pos = find_by_iter_or_by_value(node_iv);
             if (pos==adj_list.end()) {
                 std::string msg = is_out ? "out" : "in";
-                print_by_iter_or_by_value(std::cerr << "(neighbors) finding "<< msg <<"-neighbors of a non-existent node", node_iv) << "\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    print_by_iter_or_by_value(std::cerr << "(neighbors) finding "<< msg <<"-neighbors of a non-existent node", node_iv) << "\n";
+                }
                 throw std::runtime_error("finding "+ msg +"-neighbors of a non-existent node");
             }
             NeighborsContainerType& neighbors = [this, &pos]() -> auto& {
@@ -997,7 +1015,9 @@ namespace graph_lite {
             static_assert(can_construct_node<V>);
             AdjListConstIterType src_pos = find_by_iter_or_by_value(src_iv);
             if (src_pos==adj_list.end()) {
-                print_by_iter_or_by_value(std::cerr << "(find_neighbor) source node not found", src_iv) << "\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    print_by_iter_or_by_value(std::cerr << "(find_neighbor) source node not found", src_iv) << "\n";
+                }
                 throw std::runtime_error{"source node is not found"};
             }
             const NeighborsContainerType& src_neighbors = [this, &src_pos]() -> auto& {
@@ -1020,7 +1040,9 @@ namespace graph_lite {
             static_assert(can_construct_node<V>);
             AdjListIterType src_pos = find_by_iter_or_by_value(src_iv);
             if (src_pos==adj_list.end()) {
-                print_by_iter_or_by_value(std::cerr << "(find_neighbor) source node not found", src_iv) << "\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    print_by_iter_or_by_value(std::cerr << "(find_neighbor) source node not found", src_iv) << "\n";
+                }
                 throw std::runtime_error{"source node is not found"};
             }
             NeighborsContainerType& src_neighbors = [this, &src_pos]() -> auto& {
@@ -1057,11 +1079,13 @@ namespace graph_lite {
             AdjListConstIterType src_pos = find_by_iter_or_by_value(source_iv);
             AdjListConstIterType tgt_pos = find_by_iter_or_by_value(target_iv);
             if (src_pos==adj_list.end() or tgt_pos==adj_list.end()) {
-                if (src_pos==adj_list.end()) {
-                    print_by_iter_or_by_value(std::cerr << "(count_edges) source node not found", source_iv) << "\n";
-                }
-                if (tgt_pos==adj_list.end()) {
-                    print_by_iter_or_by_value(std::cerr << "(count_edges) target node not found", target_iv) << "\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    if (src_pos==adj_list.end()) {
+                        print_by_iter_or_by_value(std::cerr << "(count_edges) source node not found", source_iv) << "\n";
+                    }
+                    if (tgt_pos==adj_list.end()) {
+                        print_by_iter_or_by_value(std::cerr << "(count_edges) target node not found", target_iv) << "\n";
+                    }
                 }
                 return 0;
             }
@@ -1093,7 +1117,9 @@ namespace graph_lite {
                 // this catches multi-self-loop as well
                 const NeighborsContainerType& neighbors = get_out_neighbors(src_pos);
                 if (detail::container::find(neighbors, tgt_full)!=neighbors.end()) {
-                    std::cerr << "(add_edge) re-adding existing edge: (" << src_full << ", " << tgt_full << ")\n";
+                    if constexpr(logging == Logging::ALLOWED){
+                        std::cerr << "(add_edge) re-adding existing edge: (" << src_full << ", " << tgt_full << ")\n";
+                    }
                     return true;
                 }
             }
@@ -1103,7 +1129,9 @@ namespace graph_lite {
         bool check_self_loop(AdjListIterType src_pos, AdjListIterType tgt_pos, const NodeType& src_full) {
             if constexpr(self_loop==SelfLoop::DISALLOWED) {
                 if (src_pos==tgt_pos) {
-                    std::cerr << "(add_edge) adding self loop on node: " << src_full << "\n";
+                    if constexpr(logging == Logging::ALLOWED){
+                        std::cerr << "(add_edge) adding self loop on node: " << src_full << "\n";
+                    }
                     return true;
                 }
             }
@@ -1177,11 +1205,13 @@ namespace graph_lite {
             auto src_pos = find_by_iter_or_by_value(source_iv);
             auto tgt_pos = find_by_iter_or_by_value(target_iv);
             if(src_pos==adj_list.end() or tgt_pos==adj_list.end()) {
-                if (src_pos==adj_list.end()) {
-                    print_by_iter_or_by_value(std::cerr << "(remove_edge) edge involves non-existent node", source_iv) << "\n";
-                }
-                if (tgt_pos==adj_list.end()) {
-                    print_by_iter_or_by_value(std::cerr << "(remove_edge) edge involves non-existent node", target_iv) << "\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    if (src_pos==adj_list.end()) {
+                        print_by_iter_or_by_value(std::cerr << "(remove_edge) edge involves non-existent node", source_iv) << "\n";
+                    }
+                    if (tgt_pos==adj_list.end()) {
+                        print_by_iter_or_by_value(std::cerr << "(remove_edge) edge involves non-existent node", target_iv) << "\n";
+                    }
                 }
                 return 0;  // no-op if nodes are not found
             }
@@ -1189,7 +1219,9 @@ namespace graph_lite {
             const NodeType & tgt_full = tgt_pos->first;
             if constexpr(self_loop==SelfLoop::DISALLOWED) {
                 if (src_pos==tgt_pos) {  // we know self loop cannot exist
-                    std::cerr << "(remove_edge) cannot remove self loop on node " << src_full << " when self loop is not even permitted\n";
+                    if constexpr(logging == Logging::ALLOWED){
+                        std::cerr << "(remove_edge) cannot remove self loop on node " << src_full << " when self loop is not even permitted\n";
+                    }
                     return 0;
                 }
             }
@@ -1197,7 +1229,9 @@ namespace graph_lite {
             if constexpr(multi_edge==MultiEdge::DISALLOWED) {  // remove at most 1
                 NeighborsIterator src_remove_pos = detail::container::find(src_neighbors, tgt_full);
                 if (src_remove_pos==src_neighbors.cend()) {
-                    std::cerr << "(remove_edge) edge (" << src_full << ", " << tgt_full << ") not found\n";
+                    if constexpr(logging == Logging::ALLOWED){
+                        std::cerr << "(remove_edge) edge (" << src_full << ", " << tgt_full << ") not found\n";
+                    }
                     return 0;
                 }
                 remove_edge(ConstIterator{src_pos}, src_remove_pos);
@@ -1223,8 +1257,10 @@ namespace graph_lite {
                     int num_tgt_removed = detail::container::erase_all(get_in_neighbors(tgt_pos), src_full);
                     assert(num_edges_removed == num_tgt_removed);
                 }
-                if (num_edges_removed==0) {
-                    std::cerr << "(remove_edge) edge (" << src_full << ", " << tgt_full << ") not found\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    if (num_edges_removed==0) {
+                        std::cerr << "(remove_edge) edge (" << src_full << ", " << tgt_full << ") not found\n";
+                    }
                 }
                 num_of_edges -= num_edges_removed;
                 return num_edges_removed;
@@ -1273,7 +1309,9 @@ namespace graph_lite {
         int remove_nodes(const T& node_iv) noexcept {
             auto pos = find_by_iter_or_by_value(node_iv);
             if (pos == adj_list.end()) { // no-op if not found
-                print_by_iter_or_by_value(std::cerr << "(remove_nodes) removing non-existent node", node_iv) << "\n";
+                if constexpr(logging == Logging::ALLOWED){
+                    print_by_iter_or_by_value(std::cerr << "(remove_nodes) removing non-existent node", node_iv) << "\n";
+                }
                 return 0;
             }
             purge_edge_with<true>(pos);  // purge all edges going out of node
